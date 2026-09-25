@@ -1,0 +1,19 @@
+# Virtual Environment
+venv/
+env/
+.env
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Data & Database (Keep folder structure, ignore contents)
+data/weather.db
+data/raw/*.csv
+data/processed/*.csv
+
+# Models (Ignore large pickle files for now)
+models/*.pkl
+
+# Notebook Checkpoints
+.ipynb_checkpoints/
