@@ -1,0 +1,142 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "hours"
+                        }
+                    ]
+                }
+            },
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "position": [
+                368,
+                -16
+            ],
+            "typeVersion": 1.1,
+            "id": "55abb612-7796-47f7-be9a-7b1aa5c51705"
+        },
+        {
+            "parameters": {
+                "url": "https://api.open-meteo.com/v1/forecast?latitude=33.5973&longitude=73.0481&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,surface_pressure,cloud_cover&hourly=temperature_2m,relative_humidity_2m,precipitation&past_days=1&timezone=Asia%2FKarachi",
+                "options": {}
+            },
+            "name": "Fetch Twin Cities Weather",
+            "type": "n8n-nodes-base.httpRequest",
+            "position": [
+                592,
+                -16
+            ],
+            "typeVersion": 4.1,
+            "id": "979d8628-a3bf-4f5d-92d7-21857c29154e"
+        },
+        {
+            "parameters": {
+                "jsCode": "const data = $input.item.json;\nconst current = data.current;\nconst hourly = data.hourly;\n\n// Truncate minutes from current time (e.g., 06:15 -> 06:00) to match hourly array\nconst currentTime = current.time;\nconst currentHourString = currentTime.substring(0, 14) + \"00\"; \nconst currentIndex = hourly.time.indexOf(currentHourString);\n\nif (currentIndex < 24) throw new Error(\"Not enough historical data for lags\");\n\nconst temp_lag_1 = hourly.temperature_2m[currentIndex - 1];\nconst temp_lag_3 = hourly.temperature_2m[currentIndex - 3];\nconst temp_lag_24 = hourly.temperature_2m[currentIndex - 24];\nconst humidity_lag_1 = hourly.relative_humidity_2m[currentIndex - 1];\nconst rain_lag_1 = hourly.precipitation[currentIndex - 1];\n\nconst temp_rolling_6 = hourly.temperature_2m.slice(currentIndex - 6, currentIndex).reduce((a,b)=>a+b,0)/6;\nconst temp_rolling_24 = hourly.temperature_2m.slice(currentIndex - 24, currentIndex).reduce((a,b)=>a+b,0)/24;\n\nconst date = new Date(currentTime);\n\nreturn {\n  hour: date.getHours(),\n  month: date.getMonth() + 1,\n  temperature_2m: current.temperature_2m,\n  relative_humidity_2m: current.relative_humidity_2m,\n  precipitation: current.precipitation,\n  wind_speed_10m: current.wind_speed_10m,\n  surface_pressure: current.surface_pressure,\n  cloud_cover: current.cloud_cover,\n  temp_lag_1: Number(temp_lag_1.toFixed(2)),\n  temp_lag_3: Number(temp_lag_3.toFixed(2)),\n  temp_lag_24: Number(temp_lag_24.toFixed(2)),\n  humidity_lag_1: Number(humidity_lag_1.toFixed(2)),\n  rain_lag_1: Number(rain_lag_1.toFixed(2)),\n  temp_rolling_6: Number(temp_rolling_6.toFixed(2)),\n  temp_rolling_24: Number(temp_rolling_24.toFixed(2))\n};"
+            },
+            "name": "Prepare ML Features",
+            "type": "n8n-nodes-base.code",
+            "position": [
+                816,
+                -16
+            ],
+            "typeVersion": 2,
+            "id": "b1133b58-cdb3-4c92-9f80-20164f41ea61"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://127.0.0.1:8000/predict",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify($json) }}",
+                "options": {}
+            },
+            "name": "Predict Weather",
+            "type": "n8n-nodes-base.httpRequest",
+            "position": [
+                1040,
+                -16
+            ],
+            "typeVersion": 4.1,
+            "id": "2db1a11e-dbce-42dc-a5fa-1e6f2325158f"
+        },
+        {
+            "parameters": {
+                "sendTo": "waleedsaeed1098@gmail.com",
+                "subject": "Live Weather Prediction: Islamabad / Rawalpindi",
+                "message": "={{'Weather Update for Islamabad / Rawalpindi:\\n\\nExpected Temperature (in 3 hours): ' + $json.predicted_temperature_3h + '°C\\nRain Probability: ' + $json.rain_probability_percent + '%'}}",
+                "options": {}
+            },
+            "name": "Send Email Alert",
+            "type": "n8n-nodes-base.gmail",
+            "position": [
+                1248,
+                -16
+            ],
+            "typeVersion": 2.1,
+            "id": "4b1aa9f1-7568-4911-90a2-c4078606a5b9",
+            "webhookId": "a6cf4507-f12d-4d3b-bd46-b1f4eec972e3",
+            "credentials": {
+                "gmailOAuth2": {
+                    "id": "BytnDmHBknpejLQg",
+                    "name": "Gmail account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Twin Cities Weather",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Twin Cities Weather": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare ML Features",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare ML Features": {
+            "main": [
+                [
+                    {
+                        "node": "Predict Weather",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Predict Weather": {
+            "main": [
+                [
+                    {
+                        "node": "Send Email Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "f27a82391b97e4c0f0d11db950b9a1b47fa6cf6c10767a8ca4efa97bbcc0ec59"
+    }
+}
